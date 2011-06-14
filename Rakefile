@@ -1,32 +1,76 @@
 require 'rubygems'
 require 'rake'
 
-desc "create symbolic links to each config file"
-task :symlink do
-  symlink
+desc "symlink vim files"
+task :default do
+  symlink %w[ .vimrc .gvimrc .vim .ackrc .autotest .bashrc .gemrc .gitconfig .gitk .gitmodules .irbrc .rdebugrc .rvmrc .watchr.rb .zsh .zshrc ]
+  # install vundle
+  system "git clone http://github.com/gmarik/vundle.git ~/.vim/vundle.git"
 end
 
-namespace :symlink do
-  task :force do
-    symlink(true)
+
+def symlink(files)
+  files.each do |file|
+    case
+      when file_identical?(file) then skip_identical_file(file)
+      when replace_all_files?    then link_file(file)
+      when file_missing?(file)   then link_file(file)
+      else                            prompt_to_link_file(file)
+    end
   end
 end
 
-desc "adjust for Windows"
-task :windows do
-	abort 'This is for Windows, yo!' unless RUBY_PLATFORM.downcase.include?('mswin')
 
-	system 'git config --global core.autocrlf true'
-	system 'git config --global core.editor "e -w"'
-	system 'git config --global gui.fontdiff "-family Consolas -size 12 -weight normal -slant roman -underline 0 -overstrike 0"'
+# FILE CHECKS
+def file_exists?(file)
+  File.exists?("#{ENV['HOME']}/#{file}")
 end
 
-def symlink(force = false)
-  dir = File.dirname(__FILE__)
-  force = force ? '-Ff' : ''
+def file_missing?(file)
+  !file_exists?(file)
+end
 
-  (Dir.glob('.*') - ['.git', '.', '..']).each do |file|
-    `ln -s #{force} #{File.join(dir, file)} #{File.join(File.expand_path(ENV['HOME']), file)}`
-    # FileUtils.ln_s("#{File.join(dir, file)}", "#{ENV['HOME']}/#{file}", :force => force)
+def file_identical?(file)
+  File.identical? file, File.join(ENV['HOME'], "#{file}")
+end
+
+def replace_all_files?
+  @replace_all == true
+end
+
+
+# FILE ACTIONS
+def prompt_to_link_file(file)
+  print "overwrite? ~/#{file} [ynaq]  "
+  case $stdin.gets.chomp
+    when 'y' then replace_file(file)
+    when 'a' then replace_all(file)
+    when 'q' then exit
+    else       skip_file(file)
   end
 end
+
+def link_file(file)
+  puts " => symlinking #{file}"
+  directory = File.dirname(__FILE__)
+  sh("ln -s #{File.join(directory, file)} #{ENV['HOME']}/#{file}")
+end
+
+def replace_file(file)
+  sh "rm -rf #{ENV['HOME']}/#{file}"
+  link_file(file)
+end
+
+def replace_all(file)
+  @replace_all = true
+  replace_file(file)
+end
+
+def skip_file(file)
+  puts " => skipping ~/#{file}"
+end
+
+def skip_identical_file(file)
+  puts " => skipping identical ~/#{file}"
+end
+
